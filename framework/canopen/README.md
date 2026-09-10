@@ -6,25 +6,37 @@
 
 已引入 [CANopenNode](https://github.com/CANopenNode/CANopenNode)（锚定提交
 `9b8beed`，v4.1 之后）及其官方 [STM32 移植层](https://github.com/CANopenNode/CanOpenSTM32)，
-**阶段一（栈移植）已完成并可构建**。
+**协议栈已按主站配置接入并可构建**。
 
 ```
 framework/canopen/
 ├── CANopenNode/   301(核心) 303(指示灯) 304(GFC/SRDO) 305(LSS) 309(网关)
 │                  storage extra + CANopen.c/h + LICENSE
 │                  注：CANopen.h 无条件包含上述全部目录的头，必须完整保留
-├── port/          CO_app_STM32.c/h, CO_driver_STM32.c, CO_driver_target.h,
-│                  CO_storageBlank.c/h
-│                  ⚠ PATCHES.md 记录了我们相对上游的改动（SysTick 时基相关）
-└── OD/            OD.c, OD.h, DS301_profile.eds（通用 DS301 profile）
+├── port/          移植层
+│   ├── CO_driver_STM32.c    驱动（上游原样，未改）
+│   ├── CO_driver_target.h   目标配置（上游原样，未改）
+│   ├── CO_driver_custom.h   ← 我们的编译期功能配置（主站开关）
+│   ├── CO_app_STM32.h       精简为只保留 CANopenNodeSTM32 结构体
+│   └── PATCHES.md           ⚠ 相对上游的改动记录，改本目录前先读它
+├── OD/            OD.c, OD.h, DS301_profile.eds（通用 DS301 profile）
+└── canopen_app.c/h          ← 我们写的启动/喂栈胶水
 ```
 
-移植层内部已完成全部 CAN 底层配置（过滤器 / Start / RX 中断通知），
-不需要另写 BSP 的 CAN 层。1ms 时基由 SysTick 提供，不占用硬件 TIM。
+**分层**：驱动（`port/`）负责 CANopenNode 规定的 8 个接口函数、滤波器、
+中断接线、发送队列；`canopen_app.c/h` 负责启动序列与周期喂栈；`APP/` 只调
+`canopen_app.c/h` 暴露的三个函数，不直接接触 CANopenNode 内部。
 
-**主站功能（阶段二）尚未实现** —— 移植层的应用层是「从站」架构
-（`CO_app_STM32.c` 调 `CO_LSSinit()`，且给 `CO_CANopenInit()` 传 `NULL` 用默认从站 NMT），
-NMT 主站 / SDO 客户端 / 多轴管理等需要另写。
+**CAN 底层不需要另写 BSP 层** —— 驱动在 `CO_CANmodule_init()` 内部完成
+滤波器配置、`HAL_CAN_Start()`、RX 中断通知。`framework/BSP` 目前只负责
+`printf` 的串口重定向。
+
+**1ms 时基由 SysTick 提供**，占用 HAL 默认的 1ms 滴答，不新增硬件 TIM。
+
+**已启用主站能力**（`port/CO_driver_custom.h`）：NMT 主站、SDO 客户端、
+心跳消费多节点回调。但**主站业务逻辑尚未实现** —— 即
+「发 NMT 让某轴进 Operational」「用 SDO 读写某轴对象字典」「多轴编排」
+这些调用还没写，属于 `APP/` 的职责。
 
 ---
 

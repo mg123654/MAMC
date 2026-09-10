@@ -24,7 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "CO_app_STM32.h"
+#include "canopen_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -91,17 +91,19 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+
   MX_CAN1_Init();
+  HAL_CAN_Start(&hcan1);
+
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  /* CANopen 协议栈初始化。
-   * timerHandle 传 NULL：本工程不启用 HAL TIM 模块，1ms 时基由 SysTick 提供，
-   * 具体见 framework/canopen/port/PATCHES.md。
-   * baudrate 仅作记录，实际位时序在 can.c 的 MX_CAN1_Init 中配置(500 kbit/s)。 */
+  /* CANopen 主站初始化。
+   * 只需填这四项，其余（滤波器、HAL_CAN_Start、RX 中断通知）由 CANopen
+   * 驱动在 canopen_app_init() 内部完成，这里不要重复调用。
+   * 1ms 时基由 SysTick 提供，见 stm32f4xx_it.c 的 SysTick_Handler。 */
   canOpenNodeSTM32.CANHandle      = &hcan1;
   canOpenNodeSTM32.HWInitFunction = MX_CAN1_Init;
-  canOpenNodeSTM32.timerHandle    = NULL;
   canOpenNodeSTM32.desiredNodeID  = 1;    /* 本节点占用的 CANopen 节点号 */
   canOpenNodeSTM32.baudrate       = 500;  /* kbit/s，需与 can.c 一致 */
   canopen_app_init(&canOpenNodeSTM32);
@@ -112,7 +114,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    
     /* USER CODE BEGIN 3 */
     /* 协议栈非实时部分：处理收到的报文、推进 NMT/SDO/心跳状态机。
      * 实时部分(SYNC/RPDO/TPDO)在 SysTick_Handler 里由 canopen_app_interrupt() 驱动。 */
