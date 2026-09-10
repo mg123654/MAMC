@@ -22,6 +22,7 @@
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "CO_app_STM32.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -187,7 +188,14 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  /* CANopen 1ms 时基：SYNC 与 RPDO/TPDO 的周期处理。
+   * 本工程未启用 HAL TIM 模块，用 SysTick 代替上游的 TIM 更新中断，
+   * 见 framework/canopen/port/PATCHES.md。
+   * 优先级：SysTick=15 低于 CAN1_RX0=0，时基中断可被 CAN 接收中断打断、
+   * 反之不可，符合 CANopenNode 对中断顺序的要求。
+   * canopen_app_interrupt() 内部有 canopenRunning 守卫，CO 未就绪或正在
+   * CO_RESET_COMM 重建时会直接返回。 */
+  canopen_app_interrupt();
   /* USER CODE END SysTick_IRQn 1 */
 }
 

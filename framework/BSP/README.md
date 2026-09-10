@@ -23,6 +23,12 @@
 
 ## 现状
 
-**空占位。** 目前 `gpio.c` / `can.c` / `usart.c` 等 CubeMX 生成的外设初始化代码
-仍在 `framework/Core/Src/` 下，等真正写板级代码时再按上面的划分迁进来，
-不为了填满目录而写没有实际需求的文件。
+已有 `bsp_uart.c/.h`：实现 `__io_putchar()` / `__io_getchar()`，把 `printf`
+重定向到 USART2（115200-8N1）。
+
+**CAN 的板级层不需要在这里写** —— CANopen 移植层 `framework/canopen/port/CO_driver_STM32.c`
+已经在内部完成了全部 CAN 底层配置：调用 `HWInitFunction()`（即 `MX_CAN1_Init`）、
+配置全通过滤器、`HAL_CAN_Start()`、注册 RX 中断通知。应用代码不应再重复这些调用。
+
+`gpio.c` / `can.c` / `usart.c` 等 CubeMX 外设初始化仍在 `framework/Core/Src/` 下，
+等有实际需求时再按上面的划分迁入。
