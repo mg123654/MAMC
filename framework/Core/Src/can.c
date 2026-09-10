@@ -95,11 +95,23 @@ void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
     GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    /* CAN1 interrupt Init */
+    /* CAN1 interrupt Init
+     * RX0：接收 FIFO0 非空中断，是 CANopen 驱动的报文入口。
+     * TX ：发送邮箱空中断。**必须使能** —— CANopen 驱动会激活
+     *      CAN_IT_TX_MAILBOX_EMPTY(CO_driver_STM32.c:185)，而
+     *      CO_CANinterrupt_TX 是唯一清除 bufferFull 的地方。若该中断收不到，
+     *      3 个邮箱占满后发送会永久停摆，表现为「少量报文能发、连续发送卡死」。
+     * SCE：状态改变中断（错误/总线关闭）。AutoBusOff 已在硬件层自动恢复总线，
+     *      使能 SCE 是为了能观察到错误状态。
+     * 优先级：RX0 最紧急(0)，TX/SCE 次之(1)，均高于 SysTick(15)。 */
     HAL_NVIC_SetPriority(CAN1_RX0_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(CAN1_RX0_IRQn);
-  /* USER CODE BEGIN CAN1_MspInit 1 */
 
+    HAL_NVIC_SetPriority(CAN1_TX_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(CAN1_TX_IRQn);
+    HAL_NVIC_SetPriority(CAN1_SCE_IRQn, 1, 0);
+    HAL_NVIC_EnableIRQ(CAN1_SCE_IRQn);
+  /* USER CODE BEGIN CAN1_MspInit 1 */
   /* USER CODE END CAN1_MspInit 1 */
   }
 }

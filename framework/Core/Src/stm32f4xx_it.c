@@ -22,7 +22,7 @@
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "CO_app_STM32.h"
+#include "canopen_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -218,6 +218,25 @@ void CAN1_RX0_IRQHandler(void)
   /* USER CODE BEGIN CAN1_RX0_IRQn 1 */
 
   /* USER CODE END CAN1_RX0_IRQn 1 */
+}
+
+/**
+  * @brief This function handles CAN1 TX interrupts.
+  * @note  与 CAN1_RX0 共用同一个 HAL_CAN_IRQHandler。使能它的原因见 can.c
+  *        的 MspInit 注释：CANopen 驱动靠这个中断清除发送缓冲的 bufferFull，
+  *        少了它发送会在邮箱占满后永久停摆。
+  */
+void CAN1_TX_IRQHandler(void)
+{
+  HAL_CAN_IRQHandler(&hcan1);
+}
+
+/**
+  * @brief This function handles CAN1 status change (error / bus-off) interrupts.
+  */
+void CAN1_SCE_IRQHandler(void)
+{
+  HAL_CAN_IRQHandler(&hcan1);
 }
 
 /* USER CODE BEGIN 1 */

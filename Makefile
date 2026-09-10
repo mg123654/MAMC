@@ -84,9 +84,8 @@ framework/canopen/CANopenNode/storage/CO_storage.c \
 framework/canopen/CANopenNode/storage/CO_storageEeprom.c \
 framework/canopen/CANopenNode/extra/CO_trace.c \
 framework/canopen/OD/OD.c \
-framework/canopen/port/CO_app_STM32.c \
-framework/canopen/port/CO_driver_STM32.c \
-framework/canopen/port/CO_storageBlank.c
+framework/canopen/canopen_app.c \
+framework/canopen/port/CO_driver_STM32.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -139,7 +138,8 @@ AS_DEFS =
 # C defines
 C_DEFS =  \
 -DUSE_HAL_DRIVER \
--DSTM32F407xx
+-DSTM32F407xx \
+-DCO_DRIVER_CUSTOM
 
 
 # AS includes
@@ -150,6 +150,7 @@ C_INCLUDES =  \
 -IAPP \
 -Iframework/Core/Inc \
 -Iframework/BSP \
+-Iframework/canopen \
 -Iframework/canopen/CANopenNode \
 -Iframework/canopen/port \
 -Iframework/canopen/OD \
