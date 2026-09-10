@@ -21,7 +21,7 @@
 #include "can.h"
 #include "usart.h"
 #include "gpio.h"
-
+#include "stdio.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "canopen_app.h"
@@ -97,6 +97,9 @@ int main(void)
 
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
+
+  printf("Hello world :CANopenNode STM32F4xx Demo!\r\n");
+  
   /* USER CODE BEGIN 2 */
   /* CANopen 主站初始化。
    * 只需填这四项，其余（滤波器、HAL_CAN_Start、RX 中断通知）由 CANopen

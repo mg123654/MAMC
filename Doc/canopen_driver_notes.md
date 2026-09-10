@@ -321,4 +321,4 @@ CO_CANmodule_t::CANtxCount   /* 一共积压几项（0 则什么都不用做） 
 | `framework/canopen/port/PATCHES.md` | 相对上游的改动记录 |
 | `framework/canopen/canopen_app.c` | 本项目的启动 / 喂栈胶水 |
 | `framework/canopen/CANopenNode/301/CO_driver.h` | 移植接口契约（8 个函数） |
-| `Doc/port_note.md` | CAN1 外设配置记录 |
+| `Doc/can_interrupt_fifo_notes.md` | bxCAN 中断三层链、FIFO0/FIFO1 与滤波器配置 |
