@@ -59,7 +59,34 @@ framework/Core/Src/sysmem.c \
 framework/Core/Src/syscalls.c \
 framework/Core/Src/gpio.c \
 framework/Core/Src/can.c \
-framework/Core/Src/usart.c
+framework/Core/Src/usart.c \
+framework/BSP/bsp_uart.c \
+framework/canopen/CANopenNode/CANopen.c \
+framework/canopen/CANopenNode/301/CO_Emergency.c \
+framework/canopen/CANopenNode/301/CO_fifo.c \
+framework/canopen/CANopenNode/301/CO_HBconsumer.c \
+framework/canopen/CANopenNode/301/CO_NMT_Heartbeat.c \
+framework/canopen/CANopenNode/301/CO_Node_Guarding.c \
+framework/canopen/CANopenNode/301/CO_ODinterface.c \
+framework/canopen/CANopenNode/301/CO_PDO.c \
+framework/canopen/CANopenNode/301/CO_SDOclient.c \
+framework/canopen/CANopenNode/301/CO_SDOserver.c \
+framework/canopen/CANopenNode/301/CO_SYNC.c \
+framework/canopen/CANopenNode/301/CO_TIME.c \
+framework/canopen/CANopenNode/301/crc16-ccitt.c \
+framework/canopen/CANopenNode/303/CO_LEDs.c \
+framework/canopen/CANopenNode/304/CO_GFC.c \
+framework/canopen/CANopenNode/304/CO_SRDO.c \
+framework/canopen/CANopenNode/305/CO_LSSmaster.c \
+framework/canopen/CANopenNode/305/CO_LSSslave.c \
+framework/canopen/CANopenNode/309/CO_gateway_ascii.c \
+framework/canopen/CANopenNode/storage/CO_storage.c \
+framework/canopen/CANopenNode/storage/CO_storageEeprom.c \
+framework/canopen/CANopenNode/extra/CO_trace.c \
+framework/canopen/OD/OD.c \
+framework/canopen/port/CO_app_STM32.c \
+framework/canopen/port/CO_driver_STM32.c \
+framework/canopen/port/CO_storageBlank.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -122,6 +149,10 @@ AS_INCLUDES =
 C_INCLUDES =  \
 -IAPP \
 -Iframework/Core/Inc \
+-Iframework/BSP \
+-Iframework/canopen/CANopenNode \
+-Iframework/canopen/port \
+-Iframework/canopen/OD \
 -Iframework/Drivers/STM32F4xx_HAL_Driver/Inc \
 -Iframework/Drivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 -Iframework/Drivers/CMSIS/Device/ST/STM32F4xx/Include \

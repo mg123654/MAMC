@@ -24,7 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "CO_app_STM32.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,7 +45,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+/* 注意命名：移植层的全局是 CANopenNodeSTM32* canopenNodeSTM32（指针），
+ * 此处刻意用大写 O 的 canOpenNodeSTM32（结构体本体）以区分，避免符号冲突。
+ * 与上游官方范例的命名保持一致。 */
+CANopenNodeSTM32 canOpenNodeSTM32;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -92,7 +95,16 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  /* CANopen 协议栈初始化。
+   * timerHandle 传 NULL：本工程不启用 HAL TIM 模块，1ms 时基由 SysTick 提供，
+   * 具体见 framework/canopen/port/PATCHES.md。
+   * baudrate 仅作记录，实际位时序在 can.c 的 MX_CAN1_Init 中配置(500 kbit/s)。 */
+  canOpenNodeSTM32.CANHandle      = &hcan1;
+  canOpenNodeSTM32.HWInitFunction = MX_CAN1_Init;
+  canOpenNodeSTM32.timerHandle    = NULL;
+  canOpenNodeSTM32.desiredNodeID  = 1;    /* 本节点占用的 CANopen 节点号 */
+  canOpenNodeSTM32.baudrate       = 500;  /* kbit/s，需与 can.c 一致 */
+  canopen_app_init(&canOpenNodeSTM32);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -102,6 +114,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    /* 协议栈非实时部分：处理收到的报文、推进 NMT/SDO/心跳状态机。
+     * 实时部分(SYNC/RPDO/TPDO)在 SysTick_Handler 里由 canopen_app_interrupt() 驱动。 */
+    canopen_app_process();
   }
   /* USER CODE END 3 */
 }
