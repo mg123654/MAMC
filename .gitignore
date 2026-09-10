@@ -1,0 +1,17 @@
+# 构建产物（Makefile 的 BUILD_DIR）
+build/
+
+# 编译中间文件
+*.o
+*.d
+*.lst
+*.map
+*.elf
+*.hex
+*.bin
+*.su
+
+# 编辑器 / 系统
+.DS_Store
+*~
+*.swp

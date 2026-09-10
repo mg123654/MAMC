@@ -1,0 +1,28 @@
+{
+    // 工具链（gdb / make / gcc / openocd）由 STM32CubeCLT 安装的
+    // /etc/profile.d/cubeclt-bin-path_1.22.0.sh 加进 PATH，
+    // 终端和桌面启动的 VS Code 都能继承，所以这里不用写死绝对路径，
+    // 升级 CubeCLT 也不会过期。
+
+    // 让 C/C++ 插件认识 STM32 头文件，否则 IntelliSense 满屏红波浪线
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/Core/Inc",
+        "${workspaceFolder}/Drivers/STM32F4xx_HAL_Driver/Inc",
+        "${workspaceFolder}/Drivers/STM32F4xx_HAL_Driver/Inc/Legacy",
+        "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32F4xx/Include",
+        "${workspaceFolder}/Drivers/CMSIS/Include"
+    ],
+    "C_Cpp.default.defines": [
+        "USE_HAL_DRIVER",
+        "STM32F407xx"
+    ],
+    "C_Cpp.default.cStandard": "c11",
+    "C_Cpp.default.compilerPath": "arm-none-eabi-gcc",
+
+    // Makefile 生成的中间文件不用扫
+    "files.exclude": {
+        "**/*.o": true,
+        "**/*.d": true,
+        "**/*.lst": true
+    }
+}
