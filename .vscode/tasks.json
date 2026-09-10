@@ -1,0 +1,78 @@
+{
+    // STM32F407VET6 构建 / 烧录任务
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "构建",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "-j"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "presentation": {
+                "reveal": "silent",
+                "clear": true
+            }
+        },
+        {
+            "label": "清理",
+            "type": "shell",
+            "command": "make",
+            "args": [
+                "clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            // 只烧录、不进调试：program ... verify reset exit
+            "label": "烧录 (ST-Link)",
+            "type": "shell",
+            "command": "openocd",
+            "args": [
+                "-f",
+                "interface/stlink.cfg",
+                "-f",
+                "target/stm32f4x.cfg",
+                "-c",
+                "program ${workspaceFolder}/build/multi-axis-canopen-master.elf verify reset exit"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "构建",
+            "problemMatcher": []
+        },
+        {
+            // DAPLink / CMSIS-DAP 只需要把接口配置换成 cmsis-dap.cfg
+            "label": "烧录 (DAPLink)",
+            "type": "shell",
+            "command": "openocd",
+            "args": [
+                "-f",
+                "interface/cmsis-dap.cfg",
+                "-f",
+                "target/stm32f4x.cfg",
+                "-c",
+                "program ${workspaceFolder}/build/multi-axis-canopen-master.elf verify reset exit"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "构建",
+            "problemMatcher": []
+        }
+    ]
+}
