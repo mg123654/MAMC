@@ -51,9 +51,14 @@ void MX_CAN1_Init(void)
   hcan1.Init.TimeSeg1 = CAN_BS1_11TQ;
   hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
-  hcan1.Init.AutoBusOff = DISABLE;
+  /* 以下两项偏离 CubeMX 默认值(DISABLE)，为 CANopen 必需：
+   * AutoBusOff        - 关闭则进入 bus-off 后永久停驻，需软件干预；
+   *                     CANopen 要求控制器自动恢复总线。
+   * AutoRetransmission- 关闭则仲裁丢失/出错后不重发，PDO/SDO 会丢帧；
+   *                     该选项本是给时间触发 CAN(TTCAN) 用的。 */
+  hcan1.Init.AutoBusOff = ENABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
-  hcan1.Init.AutoRetransmission = DISABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
   hcan1.Init.ReceiveFifoLocked = DISABLE;
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
