@@ -12,8 +12,9 @@
 /**
   * @brief  调试串口使用的 USART 实例
   * @note   USART1(PA9/PA10) 与 USART2(PA2/PA3) 均已在 CubeMX 中初始化为
-  *         115200-8N1。此处默认选 USART2，改这一行即可切换。
+  *         115200-8N1。当前板子上 CH340 USB-TTL 接在 USART1(PA9/PA10)，
+  *         故选 huart1；改这一行即可切换。
   */
-#define BSP_DEBUG_UART_HANDLE   huart2
+#define BSP_DEBUG_UART_HANDLE   huart1
 
 #endif /* BSP_UART_H */

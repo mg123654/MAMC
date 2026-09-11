@@ -1,80 +1,25 @@
+
 {
-    // Cortex-Debug + OpenOCD + arm-none-eabi-gdb
-    // 目标: STM32F407VET6 @ multi-axis-canopen-master
-    //
-    // 工具链 (arm-none-eabi-gdb / openocd) 直接取自 PATH，无需写死路径。
-    //
-    // 尚未接入烧录器时这些配置无法启动（OpenOCD 会报 "open failed"），
-    // 接上探针后在下拉列表里选对应的一条即可：
-    //   ST-Link  -> "调试 (ST-Link)"   / "附加 (ST-Link)"
-    //   DAPLink  -> "调试 (DAPLink)"   / "附加 (DAPLink)"
-    //
-    // 只烧录不调试：命令面板 Tasks: Run Task -> "烧录 (ST-Link)"。
     "version": "0.2.0",
     "configurations": [
         {
-            // launch = 烧录 + 复位 + 停在 main，最常用的模式
-            "name": "调试 (ST-Link)",
+            "name": "测试链路:F4硬件，加载F4的elf",
             "type": "cortex-debug",
             "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/build/multi-axis-canopen-master.elf",
             "servertype": "openocd",
+            "executable": "${workspaceFolder}/build/multi-axis-canopen-master.elf", // 依旧用F4编译出来的elf符号
             "configFiles": [
                 "interface/stlink.cfg",
-                "target/stm32f4x.cfg"
+                "target/stm32f4x.cfg"   // ✅ cfg必须匹配真实硬件G431，保证OpenOCD不崩溃
             ],
-            "device": "STM32F407VE",
-            "svdFile": "${workspaceFolder}/STM32F407.svd",
+            "openOCDLaunchCommands": [
+                "reset_config none separate",
+                "init",
+                "reset halt"
+            ],
+            "svdFile": "${workspaceFolder}/STM32F407.svd", // SVD匹配真实硬件
             "runToEntryPoint": "main",
-            "preLaunchTask": "构建"
-        },
-        {
-            // DAPLink / CMSIS-DAP 探针，仅接口配置文件不同
-            "name": "调试 (DAPLink)",
-            "type": "cortex-debug",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/build/multi-axis-canopen-master.elf",
-            "servertype": "openocd",
-            "configFiles": [
-                "interface/cmsis-dap.cfg",
-                "target/stm32f4x.cfg"
-            ],
-            "device": "STM32F407VE",
-            "svdFile": "${workspaceFolder}/STM32F407.svd",
-            "runToEntryPoint": "main",
-            "preLaunchTask": "构建"
-        },
-        {
-            // attach = 不烧录、不复位，直接挂到正在运行的固件上。
-            // 程序已经跑飞或只想看现场时用这条。
-            "name": "附加 (ST-Link)",
-            "type": "cortex-debug",
-            "request": "attach",
-            "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/build/multi-axis-canopen-master.elf",
-            "servertype": "openocd",
-            "configFiles": [
-                "interface/stlink.cfg",
-                "target/stm32f4x.cfg"
-            ],
-            "device": "STM32F407VE",
-            "svdFile": "${workspaceFolder}/STM32F407.svd"
-        },
-        {
-            "name": "附加 (DAPLink)",
-            "type": "cortex-debug",
-            "request": "attach",
-            "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/build/multi-axis-canopen-master.elf",
-            "servertype": "openocd",
-            "configFiles": [
-                "interface/cmsis-dap.cfg",
-                "target/stm32f4x.cfg"
-            ],
-            "device": "STM32F407VE",
-            "svdFile": "${workspaceFolder}/STM32F407.svd"
+            "showDevDebugOutput": "raw"
         }
     ]
 }

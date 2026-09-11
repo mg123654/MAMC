@@ -225,6 +225,30 @@ $(BUILD_DIR):
 	mkdir $@		
 
 #######################################
+# flash / erase (OpenOCD + ST-Link)
+#######################################
+# 与 .vscode/tasks.json 的「烧录 (ST-Link)」任务等价，供命令行直接使用。
+#
+# 注意：OpenOCD 对探针是【排他】占用。若 VS Code 的 cortex-debug 调试会话
+# 正开着，它已抓走 ST-Link，这里会在 init 阶段失败并报：
+#     ** OpenOCD init failed **
+# 此时先停止调试会话，再执行 make flash。
+#
+# 换 DAPLink 探针：make flash OCD_IFACE=interface/cmsis-dap.cfg
+OCD         = openocd
+OCD_IFACE  ?= interface/stlink.cfg
+OCD_TARGET ?= target/stm32f4x.cfg
+
+flash: $(BUILD_DIR)/$(TARGET).elf
+	$(OCD) -f $(OCD_IFACE) -f $(OCD_TARGET) \
+		-c "program $< verify reset exit"
+
+# 整片擦除（STM32F4 的 flash 驱动沿用 stm32f2x，命令名就是 stm32f2x）
+erase:
+	$(OCD) -f $(OCD_IFACE) -f $(OCD_TARGET) \
+		-c "init; reset halt; stm32f2x mass_erase 0; exit"
+
+#######################################
 # clean up
 #######################################
 clean:
