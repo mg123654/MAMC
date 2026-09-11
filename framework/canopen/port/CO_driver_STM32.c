@@ -31,16 +31,12 @@
 #include "301/CO_driver.h"
 #include "CO_app_STM32.h"
 
-/* ═══════════════════════════════════════════════════════════════════
- *  接收帧旁路钩子开关 —— 改这一个数字即可
- *
- *    1 = 启用   每收到一帧回调一次 CO_CANrxCaptureHook()
- *    0 = 关闭   连调用都不编译，零开销
- *
- *  钩子是弱符号，应用层在 APP/main.c 里给出强定义覆盖下面的空壳。
- * ═══════════════════════════════════════════════════════════════════ */
-#define CO_CAN_RX_CAPTURE_HOOK 1
 
+
+#include "hook.h"
+#ifndef CO_CAN_RX_CAPTURE_HOOK
+#define CO_CAN_RX_CAPTURE_HOOK 0
+#endif
 
 
 #if CO_CAN_RX_CAPTURE_HOOK
@@ -61,6 +57,7 @@ CO_CANrxCaptureHook(uint32_t ident, uint8_t dlc, const uint8_t* data) {
     (void)data;
 }
 #endif /* CO_CAN_RX_CAPTURE_HOOK */
+
 
 /* Local CAN module object */
 static CO_CANmodule_t* CANModule_local = NULL; /* Local instance of global CAN module */

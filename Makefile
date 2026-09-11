@@ -86,7 +86,8 @@ framework/canopen/CANopenNode/extra/CO_trace.c \
 framework/canopen/OD/OD.c \
 framework/canopen/canopen_app.c \
 framework/canopen/port/CO_driver_STM32.c \
-framework/libringbuffer/ringbuf.c
+framework/libringbuffer/ringbuf.c \
+APP/hook/hook.c\
 
 # ASM sources
 ASM_SOURCES =  \
@@ -159,7 +160,8 @@ C_INCLUDES =  \
 -Iframework/Drivers/STM32F4xx_HAL_Driver/Inc \
 -Iframework/Drivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 -Iframework/Drivers/CMSIS/Device/ST/STM32F4xx/Include \
--Iframework/Drivers/CMSIS/Include
+-Iframework/Drivers/CMSIS/Include \
+-IAPP/hook
 
 
 # compile gcc flags
