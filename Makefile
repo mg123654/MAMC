@@ -85,7 +85,8 @@ framework/canopen/CANopenNode/storage/CO_storageEeprom.c \
 framework/canopen/CANopenNode/extra/CO_trace.c \
 framework/canopen/OD/OD.c \
 framework/canopen/canopen_app.c \
-framework/canopen/port/CO_driver_STM32.c
+framework/canopen/port/CO_driver_STM32.c \
+framework/libringbuffer/ringbuf.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -150,6 +151,7 @@ C_INCLUDES =  \
 -IAPP \
 -Iframework/Core/Inc \
 -Iframework/BSP \
+-Iframework/libringbuffer \
 -Iframework/canopen \
 -Iframework/canopen/CANopenNode \
 -Iframework/canopen/port \

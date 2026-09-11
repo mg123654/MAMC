@@ -13,7 +13,7 @@
 
 | 文件 | 来源 | 状态 |
 | --- | --- | --- |
-| `CO_driver_STM32.c` | 上游 | **原样，一行未改** |
+| `CO_driver_STM32.c` | 上游 | **+22 行**：新增接收旁路钩子 `CO_CANrxCaptureHook`（见下） |
 | `CO_driver_target.h` | 上游 | **原样，一行未改** |
 | `CO_driver_custom.h` | — | **本项目新增**：编译期功能配置 |
 | `CO_app_STM32.h` | 上游 | 精简为只保留结构体，声明部分删除 |
@@ -97,6 +97,35 @@ CANopen.h → 301/CO_driver.h → CO_config.h（只定义“位”宏）
 - `CO_app_STM32.c`：由 `framework/canopen/canopen_app.c` 取代
 - `CO_storageBlank.c/h`：仅被上面那个文件引用；且上游在
   `CO_driver_target.h:48` 已 `#undef CO_CONFIG_STORAGE_ENABLE`，存储功能是关闭的
+
+---
+
+### 4. `CO_driver_STM32.c` —— 新增接收旁路钩子
+
+为了把收到的 CAN 帧旁听一份（本工程用于报文日志），在该文件里加了一个
+**弱符号钩子**，共 +22 行、无删除：
+
+```c
+/* 前置声明（prv_read_can_received_msg 会调用它） */
+void CO_CANrxCaptureHook(uint32_t ident, uint8_t dlc, const uint8_t* data);
+
+/* 调用点：prv_read_can_received_msg() 取到报文之后、【软件路由之前】 */
+CO_CANrxCaptureHook(rcvMsg.ident, rcvMsg.dlc, rcvMsg.data);
+
+/* 弱定义：应用层不实现时链接到这里，零开销 */
+__weak void CO_CANrxCaptureHook(uint32_t ident, uint8_t dlc, const uint8_t* data) { ... }
+```
+
+**为什么必须改驱动**：帧在 `HAL_CAN_RxFifo0MsgPendingCallback()` 里就被
+`prv_read_can_received_msg()` 的 `HAL_CAN_GetRxMessage()` 从硬件 FIFO 取走了，
+回调之外已经拿不到 ident/dlc/data。`stm32f4xx_it.c` 的 `CAN1_RX0_IRQHandler`
+同理（它在 `HAL_CAN_IRQHandler()` 返回时，FIFO 已被读空）。
+
+**为什么用弱符号**：驱动不应反向依赖应用层。钩子默认空实现，应用层定义同名
+强函数即可覆盖 —— 与 HAL 的 `HAL_CAN_RxFifo0MsgPendingCallback` 是同一套机制。
+
+**注意**：钩子在**中断上下文**被调用，实现方必须非阻塞。本工程在
+`APP/main.c` 里实现为「整条塞进环形缓冲区」。
 
 ---
 

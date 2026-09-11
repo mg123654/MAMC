@@ -31,6 +31,37 @@
 #include "301/CO_driver.h"
 #include "CO_app_STM32.h"
 
+/* ═══════════════════════════════════════════════════════════════════
+ *  接收帧旁路钩子开关 —— 改这一个数字即可
+ *
+ *    1 = 启用   每收到一帧回调一次 CO_CANrxCaptureHook()
+ *    0 = 关闭   连调用都不编译，零开销
+ *
+ *  钩子是弱符号，应用层在 APP/main.c 里给出强定义覆盖下面的空壳。
+ * ═══════════════════════════════════════════════════════════════════ */
+#define CO_CAN_RX_CAPTURE_HOOK 1
+
+
+
+#if CO_CAN_RX_CAPTURE_HOOK
+/**
+ * \brief           接收帧旁路钩子（弱符号，默认空实现）
+ *
+ * \param[in]       ident: CAN 标识符（标准帧低 11 位有效，可能含 RTR 标志位）
+ * \param[in]       dlc:   数据长度 0..8
+ * \param[in]       data:  指向数据字节的指针
+ *
+ * 应用层定义同名函数即可覆盖，用于旁听每一帧接收（如 CAN 报文日志）。
+ * 本函数在【中断上下文】被调用，实现必须非阻塞。
+ */
+__weak void
+CO_CANrxCaptureHook(uint32_t ident, uint8_t dlc, const uint8_t* data) {
+    (void)ident;
+    (void)dlc;
+    (void)data;
+}
+#endif /* CO_CAN_RX_CAPTURE_HOOK */
+
 /* Local CAN module object */
 static CO_CANmodule_t* CANModule_local = NULL; /* Local instance of global CAN module */
 
@@ -581,6 +612,13 @@ prv_read_can_received_msg(CAN_HandleTypeDef* hcan, uint32_t fifo, uint32_t fifo_
     rcvMsgIdent = rcvMsg.ident;
 #endif
 
+#if CO_CAN_RX_CAPTURE_HOOK
+    /* 接收帧旁路钩子：应用层可实现它来旁听每一帧（本工程用于 CAN 日志）。
+     * 弱符号 —— 未实现时链接到本文件内的空函数，零开销。
+     * 注意：在中断上下文调用，实现方必须非阻塞。 */
+    CO_CANrxCaptureHook(rcvMsg.ident, rcvMsg.dlc, rcvMsg.data);
+#endif
+
     /*
      * Hardware filters are not used for the moment
      * \todo: Implement hardware filters...
@@ -673,6 +711,8 @@ HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef* hfdcan, uint32_t BufferI
     }
 }
 #else
+
+
 /**
  * \brief           Rx FIFO 0 callback.
  * \param[in]       hcan: pointer to an CAN_HandleTypeDef structure that contains
