@@ -62,6 +62,8 @@ framework/Core/Src/gpio.c \
 framework/Core/Src/can.c \
 framework/Core/Src/usart.c \
 framework/BSP/bsp_uart.c \
+framework/BSP/bsp_can.c \
+framework/BSP/diag_log.c \
 framework/canopen/CANopenNode/CANopen.c \
 framework/canopen/CANopenNode/301/CO_Emergency.c \
 framework/canopen/CANopenNode/301/CO_fifo.c \

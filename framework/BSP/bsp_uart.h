@@ -17,4 +17,16 @@
   */
 #define BSP_DEBUG_UART_HANDLE   huart1
 
+/**
+  * @brief  是否真的往串口发字节
+  * @note   置 0 时 printf 只进 RAM 环形缓冲（framework/BSP/diag_log.c），
+  *         不发串口。什么时候需要关：
+  *           - 板上没接 USB-TTL 时。115200 下每字节约 87µs，一行 60 字的日志
+  *             要**阻塞 5ms**，而 main.c 的 CAN 帧日志每秒能打几十行 ——
+  *             纯属白白拖慢主循环，还把时序搅乱。
+  *        默认 1（保持原有行为）：本工程板子上 CH340 接在 USART1，
+  *        留着串口日志。只有在明确不需要串口时才置 0。
+  */
+#define BSP_DEBUG_UART_ENABLE   1
+
 #endif /* BSP_UART_H */

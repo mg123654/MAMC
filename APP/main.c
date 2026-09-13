@@ -27,6 +27,7 @@
 #include "canopen_app.h"
 #include "canopen_master.h"
 #include "cia402.h"
+#include "diag_log.h"
 #include "ringbuf.h"
 
 #include <stdio.h>
@@ -159,6 +160,11 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+
+  /* RAM 日志缓冲必须先清、必须在任何 printf 之前。
+   * 它替串口兜底：板上没接 USB-TTL 时，靠调试器读这块内存取日志
+   * （framework/BSP/diag_log.h，读法见 tools/dump_ramlog.gdb）。 */
+  diag_log_init();
 
   /* USER CODE END 1 */
 
