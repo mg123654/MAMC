@@ -37,6 +37,7 @@ BUILD_DIR = build
 # C sources
 C_SOURCES =  \
 APP/main.c \
+APP/cia402/cia402.c \
 framework/Core/Src/stm32f4xx_it.c \
 framework/Core/Src/stm32f4xx_hal_msp.c \
 framework/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c \
@@ -85,6 +86,7 @@ framework/canopen/CANopenNode/storage/CO_storageEeprom.c \
 framework/canopen/CANopenNode/extra/CO_trace.c \
 framework/canopen/OD/OD.c \
 framework/canopen/canopen_app.c \
+framework/canopen/canopen_master.c \
 framework/canopen/port/CO_driver_STM32.c \
 framework/libringbuffer/ringbuf.c
 
@@ -149,6 +151,7 @@ AS_INCLUDES =
 # C includes
 C_INCLUDES =  \
 -IAPP \
+-IAPP/cia402 \
 -Iframework/Core/Inc \
 -Iframework/BSP \
 -Iframework/libringbuffer \

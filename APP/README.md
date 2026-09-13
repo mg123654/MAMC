@@ -4,25 +4,46 @@
 
 ## 现状
 
-只有从 `framework/Core/Src/` 迁入的 `main.c` 和 `main.h`：
+- `main.c` / `main.h` —— 从 `framework/Core/Src/` 迁入。初始化调用链与主循环，
+  另外带一个 CAN 帧日志旁路（`CO_CANrxCaptureHook` + `can_log_dump()`），
+  每秒把收到的帧打到串口，方便对着 PCAN-View 之类工具交叉验证。
+- **`cia402/`** —— CiA 402 驱动 profile 的使能状态机，见下。
 
-- `main.c` —— 初始化调用链与主循环。目前是 CubeMX 骨架，主循环为空。
-  CANopen 的初始化与周期处理将接在 `USER CODE BEGIN 2` 和主循环里。
-- `main.h` —— 主头文件，声明 `Error_Handler()` 等。
+主循环里每轮依次调三个函数，顺序有意义：
+
+```c
+canopen_app_process();   /* 协议栈非实时部分：NMT / SDO 服务器 / 心跳 */
+co_master_poll();        /* 推进 SDO 事务（底层） */
+cia402_process();        /* 读事务结果，决定下一步（业务） */
+```
+
+### `cia402/`
+
+对 DM556-CAN 这类 CiA 402 步进/伺服驱动器，用 NMT + SDO 把它推到
+**Operation Enabled**，然后每秒 SDO 读一次设备类型 0x1000 并 printf。
+
+- 使能过程是「读 0x6041 状态字 → 解码 → 选控制字 → 写 0x6040 → 再读」的闭环，
+  不是盲发一串控制字。驱动器中途报警或掉使能都能自己纠正。
+- 目标节点号在 `cia402.h` 的 `CIA402_DEFAULT_NODE_ID`，必须和驱动器
+  SW1~SW5 拨码一致；波特率两边都要 500 kbit/s（驱动器 SW6=on / SW7=off）。
+- 全程非阻塞。SDO 的收发在 CAN 中断里完成，但状态推进要靠主循环反复调用，
+  所以这里不能写阻塞等待 —— 一阻塞主循环，`canopen_app_process()` 就停了。
 
 ## 后续要放什么
 
-按用户规划，应用层承载：
-
-- **`cia402/`** —— CiA 402 伺服驱动 profile：状态机、位置/速度/力矩模式、
-  RPDO/TPDO 周期映射。对应多轴运动控制语义。
+- `cia402/` 往上长：位置/速度/回零模式（0x6060 + 0x607A/0x60FF/0x6098）、
+  RPDO/TPDO 周期映射，替代现在每步一次 SDO 的做法。
 - **`ros/`** —— ROS 接口引出，把运动指令/状态通过 ROS 消息或串口协议暴露出去。
 - 多轴管理逻辑：轴号分配、NMT 状态编排、心跳超时处理。
 
-**这些目前都尚未实现**，先占位说明归属。
+**除 `cia402/` 的使能状态机外，其余尚未实现。**
 
 ## 分层原则
 
 - 应用层只调用 `framework/canopen` 暴露的对象字典与 PDO 接口，
   不直接调 HAL，也不直接操作 CAN 外设
 - 具体硬件差异封装在 `framework/BSP`，应用层不感知
+
+SDO 客户端事务这层「发起 → 轮询 → 取结果」的通用主站能力属于协议栈，
+不属于业务，所以放在 `framework/canopen/canopen_master.c`，
+应用层通过 `canopen_master.h` 调用，不直接碰 CANopenNode 内部。

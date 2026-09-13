@@ -25,6 +25,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "canopen_app.h"
+#include "canopen_master.h"
+#include "cia402.h"
 #include "ringbuf.h"
 
 #include <stdio.h>
@@ -205,6 +207,17 @@ int main(void)
   canOpenNodeSTM32.desiredNodeID  = 1;    /* 本节点占用的 CANopen 节点号 */
   canOpenNodeSTM32.baudrate       = 500;  /* kbit/s，需与 can.c 一致 */
   canopen_app_init(&canOpenNodeSTM32);
+
+  /* 主站侧 SDO 事务层。第二个参数是本机节点号 —— 用来拦住「SDO 目标写成
+   * 自己」这种配置错误（本工程没开 CAN 回环，自己发给自己收不到应答）。
+   * 必须等 canopen_app_init() 成功、canOpenStack 非空之后再调。 */
+  co_master_init(canOpenNodeSTM32.canOpenStack, canOpenNodeSTM32.activeNodeID);
+
+  /* CiA 402 状态机。目标从站节点号见 cia402.h 的 CIA402_DEFAULT_NODE_ID，
+   * 由 DM556-CAN 的 SW1~SW5 拨码决定，两边必须一致。 */
+  cia402_init(canOpenNodeSTM32.canOpenStack, CIA402_DEFAULT_NODE_ID);
+  printf("CiA402: 目标从站 = 节点 %u，%u kbit/s（驱动器 SW6/SW7 需同为 500 kbit/s）\r\n",
+         (unsigned)CIA402_DEFAULT_NODE_ID, (unsigned)canOpenNodeSTM32.baudrate);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -217,6 +230,12 @@ int main(void)
     /* 协议栈非实时部分：处理收到的报文、推进 NMT/SDO/心跳状态机。
      * 实时部分(SYNC/RPDO/TPDO)在 SysTick_Handler 里由 canopen_app_interrupt() 驱动。 */
     canopen_app_process();
+
+    /* 顺序不能颠倒：co_master_poll() 推进 SDO 事务，cia402_process() 读它的
+     * 结果决定下一步。先让底层把事务跑完，状态机这一轮就能立刻看到结果，
+     * 少等一个主循环周期。 */
+    co_master_poll();
+    cia402_process();
 
     /* 每秒把这一秒内缓存的 CAN 帧全部打印出来 */
     uint32_t nowTick = HAL_GetTick();
