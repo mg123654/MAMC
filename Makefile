@@ -37,6 +37,11 @@ BUILD_DIR = build
 # C sources
 C_SOURCES =  \
 APP/main.c \
+APP/app_log.c \
+APP/cia402/cia402.c \
+APP/canopen_init/canopen_init.c \
+APP/motor_ctrl/motor_ctrl.c \
+APP/test/test.c \
 framework/Core/Src/stm32f4xx_it.c \
 framework/Core/Src/stm32f4xx_hal_msp.c \
 framework/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c \
@@ -61,6 +66,8 @@ framework/Core/Src/gpio.c \
 framework/Core/Src/can.c \
 framework/Core/Src/usart.c \
 framework/BSP/bsp_uart.c \
+framework/BSP/bsp_can.c \
+framework/BSP/diag_log.c \
 framework/canopen/CANopenNode/CANopen.c \
 framework/canopen/CANopenNode/301/CO_Emergency.c \
 framework/canopen/CANopenNode/301/CO_fifo.c \
@@ -85,6 +92,7 @@ framework/canopen/CANopenNode/storage/CO_storageEeprom.c \
 framework/canopen/CANopenNode/extra/CO_trace.c \
 framework/canopen/OD/OD.c \
 framework/canopen/canopen_app.c \
+framework/canopen/canopen_master.c \
 framework/canopen/port/CO_driver_STM32.c \
 framework/libringbuffer/ringbuf.c
 
@@ -149,6 +157,11 @@ AS_INCLUDES =
 # C includes
 C_INCLUDES =  \
 -IAPP \
+-IAPP/cia402 \
+-IAPP/canopen_init \
+-IAPP/motor_ctrl \
+-IAPP/test \
+-IAPP/trajectory \
 -Iframework/Core/Inc \
 -Iframework/BSP \
 -Iframework/libringbuffer \

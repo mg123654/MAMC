@@ -1,0 +1,339 @@
+/**
+  * @file    cia402.h
+  * @brief   CiA 402 专属状态机 —— 从 OP 到 Operation enabled
+  *
+  * 前置条件：通用 CANopen 初始化（等PRE-OP、配心跳、配PDO、发NMT进OP）
+  *           已由 canopen_init 模块完成，从站应进入或即将进入 OP。
+  *
+  * 流程：等OP → 设模式 → 参数 → shutdown → switch on → enable op → RUNNING
+  *
+  * 未来扩展 cia502 / cia602 时，照此模板新建文件即可，不影响本文件。
+  */
+#ifndef CIA402_H
+#define CIA402_H
+
+#include "CANopen.h"
+#include "canopen_init.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ═══════════════════════════════════════════════════════════════
+ *  主状态枚举
+ * ═══════════════════════════════════════════════════════════════ */
+
+typedef enum {
+    CIA402_WAIT_OP     = 0,  /**< 等从站心跳确认进入 OP */
+    CIA402_SET_MODE,         /**< 写 0x6060 设模式，读 0x6061 确认 */
+    CIA402_SHUTDOWN,         /**< 写控制字 0x0006，等 Ready to switch on */
+    CIA402_SWITCH_ON,        /**< 写控制字 0x0007，等 Switched on */
+    CIA402_ENABLE_OP,        /**< 写控制字 0x000F，等 Operation enabled */
+    CIA402_CFG_PARAMS,       /**< 下发该模式参数（加速度/减速度/轮廓速度等） */
+    CIA402_RUNNING,          /**< 初始化完成 */
+    CIA402_DISABLE_OP,       /**< 停机（切换模式前，写 0x0007） */
+    CIA402_WAIT_RECONFIG,    /**< 等 canopen_init 重配 PDO 完成 */
+    CIA402_FAULT,            /**< 故障 */
+} cia402_state_t;
+ 
+ /* ═══════════════════════════════════════════════════════════════
+  *  超时与重试
+  * ═══════════════════════════════════════════════════════════════ */
+ 
+#define CIA402_SDO_TIMEOUT_MS      500U
+#define CIA402_OP_TIMEOUT_MS      3000U
+#define CIA402_STEP_TIMEOUT_MS    1000U
+
+/* 一次 402 状态转换（shutdown / switch on / enable op / 设模式）的总预算。
+ * 与 CIA402_STEP_TIMEOUT_MS 不是一回事：后者是**单次 SDO** 的超时，前者是
+ * 「这一步整体多久算没戏」。少了它，驱动器死活不回目标状态时会一直
+ * 「写控制字→读状态字不匹配→再读」，每一步都成功，于是永远不超时 ——
+ * 又是「轴不动、串口什么都不说」。 */
+#define CIA402_TRANS_TIMEOUT_MS   3000U
+
+/* 故障重试：402 使能过程中任何一步失败（驱动器刚上电还没准备好、报警没清、
+ * 一次总线干扰）都会进 FAULT。若 FAULT 是终点，这一个轴就只能整机断电 ——
+ * 而「重走一遍使能流程」本来就是本状态机已有的路径，没有理由不走。
+ * 次数有限：真配置错了就停在 FAULT，别把串口刷爆。 */
+#define CIA402_FAULT_RETRY_MAX     3U      /**< 故障后最多重走几次使能流程 */
+#define CIA402_FAULT_RETRY_MS      2000U   /**< 每次重走前的等待（ms） */
+
+#define CIA402_MAX_SLAVES         8U     /**< 最大从站数量，与 canopen_init 保持一致 */
+ 
+ /* ═══════════════════════════════════════════════════════════════
+  *  CiA 402 控制字 / 状态字
+  * ═══════════════════════════════════════════════════════════════ */
+ 
+ #define CIA402_CMD_SHUTDOWN      0x0006U  /**< Switch on disabled → Ready to switch on（上电初始化用） */
+ #define CIA402_CMD_SWITCH_ON     0x0007U  /**< Ready to switch on → Switched on */
+ #define CIA402_CMD_ENABLE_OP     0x000FU  /**< Switched on → Operation enabled（电机运转） */
+ #define CIA402_CMD_DISABLE_OP    0x0007U  /**< Operation enabled → Switched on（清bit3，停机但保持励磁） */
+ 
+ /* 控制字 bit8 Halt。旧固件（MS12A/MS10A）在 PV 模式下【必须】看到一次 bit8
+  * 的 1→0 下降沿才会启动速度发生器：只写 0x000F 时驱动器状态字正常、无报错、
+  * 电机保持励磁，但 0x606C 恒为 0 —— 「使能了，但不发脉冲」。
+  * 新固件（MS12B/MS12C）没有这条厂商特殊逻辑，bit8 只做标准 Halt，兼容该时序，
+  * 所以统一走旧固件的启动方式，不做固件区分（官方手册确认无法读出固件版本号）。
+  *
+  * 两条硬约束（手册 4.4）：
+  *   1. 目标速度 0x60FF 必须先写好，再做 bit8 跳变 —— 脉冲早于速度设置无效；
+  *   2. 该脉冲每次切入 PV 模式只执行一次，运行中更新 0x60FF 不需要重复。
+  * 位置模式 / 回零模式下 bit8 就是标准 Halt，【不要】对它用（会引入异常行为）。
+  * 从站配成同步接收（use_sync=true）时，三帧各自还要跟一条 SYNC 才被从站看到 ——
+ * 完整步序、时序、以及「这期间控制字归谁写」都在 cia402.c 的 pv_start_tick()，
+ * 动这里之前先看它。 */
+ #define CIA402_CMD_HALT           0x0100U
+ #define CIA402_CMD_ENABLE_OP_HALT 0x010FU  /**< 使能 + bit8 置位（下降沿的前半拍） */
+ #define CIA402_HALT_GAP_MS          20U    /**< 启动沿每步的间隔（发帧与补 SYNC 同节拍） */
+
+ #define CIA402_STS_MASK            0x006FU  /**< 屏蔽厂家位与警告位 */
+ #define CIA402_STS_READY_SWITCH    0x0021U  /**< Ready to switch on */
+ #define CIA402_STS_SWITCHED_ON     0x0023U  /**< Switched on */
+ #define CIA402_STS_OP_ENABLED      0x0027U  /**< Operation enabled */
+ #define CIA402_STS_TARGET_REACHED  0x0400U  /**< bit10：到位（位置模式）/ 到达转速（速度模式） */
+
+ /* 位置模式控制字：0x0F 保持 OP + bit4 新目标点 + bit5 立即改变 + bit6=0 绝对位置。
+  * 注意 bit4 是【上升沿】触发 —— 每下发一个新设定点都要重新给一次沿，
+  * 所以它只适合"一条指令一个目标"的直发，不能拿来做逐点流式下发。 */
+ #define CIA402_CMD_POS_ABS        0x003FU
+ 
+ /* ═══════════════════════════════════════════════════════════════
+  *  运行模式
+  * ═══════════════════════════════════════════════════════════════ */
+ 
+/* 运行模式决定了【谁来生成轨迹】，这是选模式时最该知道的事：
+ *
+ *   PROFILE_POS(1) / PROFILE_VEL(3)  轨迹归【驱动器】：
+ *        主机只写一次最终目标（0x607A / 0x60FF），驱动器按自己的
+ *        0x6081/0x6083/0x6084 规划。主机插值没有意义 —— 驱动器不接收
+ *        中间点（PP 的新设定点靠控制字 bit4 上升沿触发），硬发只会被丢弃。
+ *        本工程当前只用这两种。
+ *
+ *   CSP(8)                           轨迹归【主机】：
+ *        主机每周期下发一个中间点（0x607A），驱动器只负责跟随。
+ *        软件 S 曲线只在这种模式下使用。
+ *        ⚠ 目前【未实现】：枚举值保留是给位置同步留的接口位，
+ *          cia402_switch_mode() 会明确拒绝它，不会静默退化成 PP。
+ *          要接上，需要 1) 补回 s_curve.c，2) 恢复 cia402 里的逐点下发路径。
+ */
+ typedef enum {
+     CIA402_MODE_PROFILE_POS = 1,   /**< 轮廓位置：驱动器规划，主机只发最终目标 */
+     CIA402_MODE_PROFILE_VEL = 3,   /**< 轮廓速度：驱动器规划 */
+     CIA402_MODE_TORQUE      = 4,   /**< 转矩（未实现） */
+     CIA402_MODE_HOMING      = 6,   /**< 回零（未实现） */
+     CIA402_MODE_CSP         = 8,   /**< 循环同步位置：主机逐点下发（未实现） */
+ } cia402_mode_t;
+ 
+ /* ═══════════════════════════════════════════════════════════════
+  *  故障码
+  * ═══════════════════════════════════════════════════════════════ */
+ 
+ typedef enum {
+     CIA402_ERR_NONE          = 0x0000,
+     CIA402_ERR_OP_TIMEOUT    = 0x0100,  /**< 等从站进 OP 超时 */
+     CIA402_ERR_MODE_TIMEOUT  = 0x0200,  /**< 设模式 SDO 超时 */
+     CIA402_ERR_MODE_SDO      = 0x0201,  /**< 设模式 SDO 失败 */
+     CIA402_ERR_MODE_MISMATCH = 0x0202,  /**< 读回模式与目标不一致 */
+     CIA402_ERR_TRANS_TIMEOUT = 0x0300,  /**< 402 状态转换超时 */
+     CIA402_ERR_TRANS_SDO     = 0x0301,  /**< 402 转换写控制字/读状态字 SDO 失败 */
+ } cia402_err_t;
+ 
+ /* PDO 配置描述定义在 canopen_init.h，通过 cia402_slave_config_t 持有指针 */
+
+/* ═══════════════════════════════════════════════════════════════
+ *  轨迹规划配置
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* 软件轨迹的算法选择。【只在 CSP 模式下生效】——
+ * 这一个结构描述的是"主机拿到轨迹生成权之后怎么画曲线"，
+ * 不参与"要不要主机生成轨迹"的判断（那个由 target_mode 决定）。
+ * PP / PV 模式下本结构整体被忽略，配了也不会被调用。
+ *
+ * ⚠ CSP 目前未实现（见 cia402_mode_t），所以本结构连同
+ *   cia402_slave_config_t.traj 现在都是【预留的配置面】：写进去不报错，
+ *   也没有任何代码读它。留着是为了让"接上 CSP"只需要补实现、不用改配置。 */
+typedef enum {
+    CIA402_TRAJ_NONE    = 0,   /**< 不做软件曲线，目标直接下发 */
+    CIA402_TRAJ_T_CURVE = 1,   /**< 梯形曲线（未实现，等同 NONE） */
+    CIA402_TRAJ_S_CURVE = 2,   /**< 7段S曲线（软件插值，接口见 trajectory/s_curve.h，实现未提供） */
+} cia402_traj_type_t;
+
+typedef struct {
+    cia402_traj_type_t curve_type;  /**< 曲线类型（仅 CSP 模式下有意义，当前无人读） */
+    uint32_t v_max;                 /**< 最大速度（pps） */
+    uint32_t a_max;                 /**< 最大加速度（pps²） */
+    uint32_t jerk;                  /**< 加加速度（pps³） */
+    uint32_t dt_ms;                 /**< 规划周期（ms），应接近 cia402_process 调用周期 */
+} cia402_traj_config_t;
+
+
+/* 模式参数（每种模式一份，上层在 switch_mode 前填好） */
+
+typedef struct {
+  uint32_t profile_velocity;  /**< 轮廓速度 0x6081，pps（位置模式用，0=不写） */
+  uint32_t acceleration;      /**< 加速度   0x6083，user units/s²（0=不写） */
+  uint32_t deceleration;      /**< 减速度   0x6084，user units/s²（0=不写） */
+  uint32_t max_profile_vel;   /**< 最大轮廓速度 0x6082，pps（0=不写） */
+} cia402_mode_params_t;
+
+/** 从站静态配置：上层定义一次，传给 cia402_set_config */
+typedef struct {
+    uint8_t  node_id;            /**< 从站节点号 */
+    uint32_t pulse_per_rev;      /**< 每圈脉冲数（rpm↔pps 换算用） */
+    uint16_t od_base_index;      /**< 过程数据 OD 基址：slave1=0x2000, slave2=0x2010 */
+    const co_pdo_config_t* vel_cfg;  /**< 速度模式 PDO 配置 */
+    const co_pdo_config_t* pos_cfg;  /**< 位置模式 PDO 配置 */
+    cia402_mode_params_t* vel_params;  /**< 速度模式参数（NULL=不配置） */
+    cia402_mode_params_t* pos_params;  /**< 位置模式参数（NULL=不配置） */
+    cia402_traj_config_t traj;   /**< 软件轨迹配置：CSP 用，当前未实现、无人读取 */
+} cia402_slave_config_t;
+
+ /* ═══════════════════════════════════════════════════════════════
+  *  从站实例（运行时全部状态）
+  * ═══════════════════════════════════════════════════════════════ */
+ 
+ typedef struct {
+   uint8_t  node_id;           /**< 从站节点号 */
+   uint8_t  hb_idx;            /**< 心跳消费者 0x1016 表中的索引 */
+
+   cia402_state_t state;       /**< 当前主状态 */
+   cia402_state_t prev_state;  /**< 上一次状态，用于触发 enter */
+   uint8_t  trans_step;        /**< 402 状态转换子步骤（0=写控制字, 1=读状态字） */
+
+   /* PV 启动沿步序（0~5，见 cia402.c 的 pv_start_tick）。
+    * 【不能和 trans_step 合用一个字段】：402 转换走完时它停在 1，而
+    * 「state 已置成 RUNNING、fsm_enter 还没跑」的那一拍会拿这个 1 误判成
+    * 「启动沿正在走」，把 set_velocity 写控制字那次挡掉，放一帧 0 出去、
+    * 驱动器掉进 Switch On Disabled。踩过。 */
+   uint8_t  pv_step;
+
+   uint32_t deadline;          /**< 当前阶段【子步骤】（单次 SDO）超时截止时刻 */
+   uint32_t state_deadline;    /**< 当前状态【整体】超时截止时刻，进状态时设定一次 */
+   uint8_t  retry;             /**< 重试次数（跨状态保留，只在 RUNNING 清零） */
+
+   bool_t   fault;             /**< 是否故障 */
+   uint16_t fault_code;        /**< 故障码 */
+
+   cia402_mode_t target_mode;  /**< 期望运行模式 */
+
+   /* 模式切换专用 */
+   cia402_mode_t pending_mode;       /**< 待切换的目标模式 */
+   const co_pdo_config_t* pending_pdo_cfg;  /**< 待切换的 PDO 配置 */
+
+   /* 参数配置子状态 */
+   uint8_t  param_step;        /**< 参数配置当前步骤 */
+   const cia402_mode_params_t* active_params;  /**< 当前模式参数指针 */
+
+   /* 过程数据 OD 变量指针 —— 每个从站指向自己的 OD_RAM 区域，
+    * 避免多从站共用 OD_RAM.x2000 等变量时互相覆盖。
+    * 由 cia402_init 根据 cfg->od_base_index 填充。 */
+   uint16_t* ctrl;        /**< &OD_RAM.x20x0_controlword */
+   uint32_t* target_pos;  /**< &OD_RAM.x20x1_target_position */
+   uint32_t* target_vel;  /**< &OD_RAM.x20x2_target_velocity */
+   uint16_t* status;      /**< &OD_RAM.x20x3_statusword */
+   uint32_t* actual_pos;  /**< &OD_RAM.x20x4_actual_position */
+   uint32_t* actual_vel;  /**< &OD_RAM.x20x5_actual_velocity */
+} cia402_slave_t;
+ 
+ /* ═══════════════════════════════════════════════════════════════
+  *  对外接口
+  * ═══════════════════════════════════════════════════════════════ */
+ 
+ /**
+   * @brief  初始化，绑定协议栈与从站配置。只做数据结构初始化，不发起通信。
+   *         前置条件：canopen_init 已完成（从站已进 OP 或即将进 OP），
+   *         心跳消费者已注册。
+   * @param  co       协议栈实例
+   * @param  cfg      从站配置（node_id、pulse_per_rev、PDO/参数指针）
+   * @param  mode     初始运行模式
+   */
+ void cia402_init(uint8_t idx, CO_t* co, const cia402_slave_config_t* cfg, cia402_mode_t mode);
+ 
+ /**
+   * @brief  状态机推进，主循环每周期调用，全程非阻塞
+   */
+ void cia402_process(uint8_t idx);
+ 
+ /**
+   * @brief  查询当前主状态
+   */
+ cia402_state_t cia402_get_state(uint8_t idx);
+ 
+ /**
+  * @brief  获取故障码
+  */
+uint16_t cia402_get_fault_code(uint8_t idx);
+
+/**
+  * @brief  PV 启动沿（①/②/③ 那六步）是否已经走完。
+  *         上层第一次下达非零速度之后沿才开始走；走完之前控制字由启动沿序列
+  *         独占（pv_start_busy），期间上层写的目标速度只会被暂存。
+  *         用途：要在速度上做时序实验之前，先用它把这一轮沿消化掉 —— 沿自带
+  *         3 条 SYNC，会提前把同步缓冲区的数据落盘，混在实验里就分不清是谁落的盘。
+  * @retval 非速度模式，或沿还没走完 → false
+  */
+bool_t cia402_pv_ready(uint8_t idx);
+
+/**
+  * @brief  请求切换运行模式（速度 ↔ 位置）。
+  *         非阻塞，调用后状态机自动完成：停机 → 重配 PDO → 设新模式 → 下发参数 → 重新使能。
+  *         只能在 CIA402_RUNNING 状态下调用。
+  *         模式参数从 cia402_init 绑定的 cfg 中取（vel_params / pos_params），
+  *         上层在调用前可直接修改 params 结构体内容。
+  * @param  mode  目标模式，只接受 CIA402_MODE_PROFILE_VEL / CIA402_MODE_PROFILE_POS；
+  *               CSP 未实现，会被明确拒绝（不会静默退化成轮廓位置）
+  * @return true=请求已接受, false=当前状态不允许切换或模式不支持
+  */
+bool_t cia402_switch_mode(uint8_t idx, cia402_mode_t mode);
+
+/**
+  * @brief  速度模式：设置目标速度并触发 PDO 发送。
+  *         内部按 pulse_per_rev 把 rpm 换算成 pps，写控制字(保持OP) + 目标速度，触发 TPDO。
+  *         唯 PV 启动沿那几步例外：那时控制字由启动沿序列独占，只写目标速度
+  *         —— 见 cia402.c 的 pv_start_tick / pv_start_busy。
+  * @param  rpm  目标速度（单位：转/分钟）
+  * @pre    当前为 CIA402_RUNNING 且模式为 PROFILE_VEL
+  */
+void cia402_set_velocity(uint8_t idx, int32_t rpm);
+
+/**
+  * @brief  位置模式：设置绝对目标位置。
+  *         写一次 0x607A + 控制字 0x003F（bit4 上升沿触发新目标点），
+  *         之后由驱动器自己规划到该位置，主机不再插值。
+  *         ⚠ 控制字 bit4 是【上升沿】触发：同一个目标只写一次。连续重发同样的
+  *           0x003F 不会重新触发；要下发新目标，中间必须先回到 bit4=0 的状态
+  *           （比如模式切换时 fsm 会把控制字重写成 0x000F）。
+  * @param  position  目标位置（单位：脉冲数，绝对）
+  * @pre    当前为 CIA402_RUNNING 且模式为 PROFILE_POS
+  */
+void cia402_set_position_abs(uint8_t idx, int32_t position);
+
+/**
+  * @brief  位置是否已到达：从站状态字 bit10（Target reached）为 1
+  * @retval 非位置模式（如速度模式）下恒返回 false
+  */
+bool_t cia402_position_reached(uint8_t idx);
+
+/**
+  * @brief  获取从站状态字（最近一次 TPDO 收到的值）
+  */
+uint16_t cia402_get_statusword(uint8_t idx);
+
+/**
+  * @brief  获取实际速度（速度模式下，最近一次 TPDO 收到的值）
+  * @return 速度（单位：rpm，内部从 pps 换算）
+  */
+int32_t cia402_get_actual_velocity(uint8_t idx);
+
+/**
+  * @brief  获取实际位置（位置模式下，最近一次 TPDO 收到的值）
+  */
+int32_t cia402_get_actual_position(uint8_t idx);
+ 
+ #ifdef __cplusplus
+ }
+ #endif
+ 
+ #endif /* CIA402_H */
